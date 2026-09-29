@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: agentops
+    description: AgentOps workflow operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,92 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /run-task:
+    post:
+      operationId: runTask
+      tags: [agentops]
+      summary: Recall before running a task
+      description: Performs mandatory Hindsight recall and either executes the ingestion tool or pauses for human review.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunTaskInput"
+      responses:
+        "200":
+          description: Workflow decision and execution result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskRunResponse"
+        "400":
+          description: Invalid task input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Hindsight service error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /hitl-approve:
+    post:
+      operationId: approveHitl
+      tags: [agentops]
+      summary: Approve or modify a paused task
+      description: Executes a human-approved task after a previous failure and retains the complete experience.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HitlApproveInput"
+      responses:
+        "200":
+          description: Approved execution result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskRunResponse"
+        "400":
+          description: Invalid approval input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Pending review was not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Hindsight service error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /memory-logs:
+    get:
+      operationId: getMemoryLogs
+      tags: [agentops]
+      summary: List retained workflow experiences
+      responses:
+        "200":
+          description: Recent retained experiences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryLogsResponse"
+        "502":
+          description: Hindsight service error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +121,197 @@ components:
           type: string
       required:
         - status
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+    TaskParameters:
+      type: object
+      properties:
+        records:
+          type: integer
+          minimum: 1
+        batch_size:
+          type: [integer, string]
+      required:
+        - records
+        - batch_size
+    RunTaskInput:
+      type: object
+      properties:
+        task:
+          type: string
+          minLength: 1
+        parameters:
+          $ref: "#/components/schemas/TaskParameters"
+      required:
+        - task
+        - parameters
+    HitlApproveInput:
+      type: object
+      properties:
+        review_id:
+          type: string
+          minLength: 1
+        parameters:
+          $ref: "#/components/schemas/TaskParameters"
+        human_action:
+          type: string
+          minLength: 1
+      required:
+        - review_id
+        - parameters
+        - human_action
+    RecallMemory:
+      type: object
+      properties:
+        id:
+          type: [string, "null"]
+        text:
+          type: string
+        type:
+          type: [string, "null"]
+        context:
+          type: [string, "null"]
+        occurred_at:
+          type: [string, "null"]
+      required:
+        - id
+        - text
+        - type
+        - context
+        - occurred_at
+    RecallResult:
+      type: object
+      properties:
+        found:
+          type: boolean
+        query:
+          type: string
+        memories:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecallMemory"
+      required:
+        - found
+        - query
+        - memories
+    PreviousFailure:
+      type: object
+      properties:
+        task:
+          type: string
+        failed_parameters:
+          $ref: "#/components/schemas/TaskParameters"
+        error:
+          type: string
+        winning_recovery_fix:
+          type: [string, "null"]
+        recovery_parameters:
+          anyOf:
+            - $ref: "#/components/schemas/TaskParameters"
+            - type: "null"
+      required:
+        - task
+        - failed_parameters
+        - error
+        - winning_recovery_fix
+        - recovery_parameters
+    ExecutionResult:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [SUCCESS, FAILURE]
+        http_status:
+          type: integer
+        message:
+          type: string
+        parameters:
+          $ref: "#/components/schemas/TaskParameters"
+        error:
+          type: [string, "null"]
+      required:
+        - status
+        - http_status
+        - message
+        - parameters
+        - error
+    TaskRunResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [EXECUTED, HITL_REQUIRED, SUCCESS, FAILURE]
+        review_id:
+          type: [string, "null"]
+        task:
+          type: string
+        parameters:
+          $ref: "#/components/schemas/TaskParameters"
+        recall:
+          $ref: "#/components/schemas/RecallResult"
+        previous_failure:
+          anyOf:
+            - $ref: "#/components/schemas/PreviousFailure"
+            - type: "null"
+        execution:
+          anyOf:
+            - $ref: "#/components/schemas/ExecutionResult"
+            - type: "null"
+        retained:
+          type: boolean
+      required:
+        - status
+        - review_id
+        - task
+        - parameters
+        - recall
+        - previous_failure
+        - execution
+        - retained
+    MemoryLog:
+      type: object
+      properties:
+        id:
+          type: [string, "null"]
+        task:
+          type: string
+        outcome:
+          type: string
+          enum: [SUCCESS, FAILURE]
+        parameters:
+          $ref: "#/components/schemas/TaskParameters"
+        error:
+          type: [string, "null"]
+        human_action:
+          type: [string, "null"]
+        timestamp:
+          type: [string, "null"]
+        text:
+          type: string
+      required:
+        - id
+        - task
+        - outcome
+        - parameters
+        - error
+        - human_action
+        - timestamp
+        - text
+    MemoryLogsResponse:
+      type: object
+      properties:
+        bank_id:
+          type: string
+        logs:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemoryLog"
+      required:
+        - bank_id
+        - logs
 

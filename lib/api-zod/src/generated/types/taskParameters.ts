@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface HealthStatus {
-  status: string;
+export interface TaskParameters {
+  /** @minimum 1 */
+  records: number;
+  batch_size: number | string;
 }
