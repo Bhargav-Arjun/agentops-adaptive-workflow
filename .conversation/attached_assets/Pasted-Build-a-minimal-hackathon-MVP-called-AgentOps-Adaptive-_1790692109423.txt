@@ -1,0 +1,241 @@
+Build a minimal hackathon MVP called "AgentOps – Adaptive Workflow Recovery Agent".
+
+IMPORTANT:
+This is a time-constrained MVP. Keep the implementation simple, reliable, and easy to demo. Do NOT over-engineer it.
+
+CORE PRODUCT IDEA:
+AgentOps is an agent workflow system that uses Hindsight as a persistent operational memory layer.
+
+Every task MUST go through Hindsight recall before the tool is executed.
+
+Core loop:
+
+User Task
+→ AgentOps Interceptor
+→ Hindsight Recall
+→ Decision
+→ Tool Execution OR Human Review
+→ Execution Result
+→ Hindsight Retain
+
+RULES:
+
+1. MANDATORY RECALL
+Every incoming task must first call Hindsight recall.
+There must be no direct Task → Tool execution path.
+
+2. NO RELEVANT PREVIOUS EXPERIENCE
+If Hindsight has no relevant previous experience:
+- Execute the simulated tool normally.
+- The tool may succeed or fail.
+- After execution, retain the complete experience in Hindsight.
+
+3. PREVIOUS SUCCESS
+If Hindsight finds a sufficiently similar previous task whose final outcome was SUCCESS:
+- Reuse the previously successful configuration.
+- Do not require human review.
+- Execute the tool using that configuration.
+- After execution, retain the new experience in Hindsight.
+
+4. PREVIOUS FAILURE
+If Hindsight finds a sufficiently similar previous task whose previous outcome was FAILURE:
+- DO NOT immediately execute the tool.
+- Return HITL_REQUIRED.
+- Show the previous failure, failed parameters, error, and previous successful recovery if available.
+- Human must review the information and either approve the previous fix or provide modified parameters.
+- Then execute the tool with the human-approved parameters.
+- Retain the new complete experience in Hindsight.
+
+SIMULATED TOOL:
+
+Create one deterministic tool called "Data Ingestion Tool".
+
+The tool should simulate processing a customer dataset.
+
+Example inputs:
+records: 100000
+batch_size: "full"
+
+Failure condition:
+- If batch_size == "full", return a simulated Database Timeout failure.
+
+Success condition:
+- If batch_size == 100, return success / 200 OK / Task Completed Successfully.
+
+This is intentionally deterministic so the hackathon demo is reproducible.
+
+EXAMPLE DEMO:
+
+FIRST RUN:
+Task: Process 100000 customer records
+batch_size: full
+
+→ Hindsight Recall
+→ No relevant memory
+→ Data Ingestion Tool
+→ FAILURE: Database Timeout
+→ Human changes batch_size from full to 100
+→ Tool executes
+→ SUCCESS
+→ Retain complete experience in Hindsight
+
+SECOND RUN:
+Task: Process 120000 customer records
+
+→ Hindsight Recall
+→ Similar previous failure found
+→ Show previous failure and recovery in the UI
+→ Human clicks "Apply Previous Fix"
+→ batch_size = 100
+→ Tool executes
+→ SUCCESS
+→ Retain new experience in Hindsight
+
+BACKEND:
+Use Python + FastAPI.
+
+Create these API endpoints:
+
+POST /api/run-task
+- Receive task and parameters.
+- Perform mandatory Hindsight recall.
+- Decide between normal execution, fast-track successful experience, or HITL_REQUIRED.
+- Return structured JSON.
+
+POST /api/hitl-approve
+- Receive human-approved/modified parameters.
+- Execute the simulated tool.
+- Retain the complete experience in Hindsight.
+- Return structured execution result.
+
+GET /api/memory-logs
+- Return a simple list/summary of stored experiences for the UI.
+
+GET /api/health
+- Return application and Hindsight connection status.
+
+HINDSIGHT:
+Integrate Hindsight using its supported/current official API or SDK.
+Do NOT invent Hindsight API methods.
+If documentation is needed, use the official Hindsight documentation.
+Create clean wrapper functions:
+
+recall_experience(task_query)
+retain_experience(experience)
+
+Use environment variables for Hindsight credentials.
+NEVER hard-code API keys or secrets.
+
+Create a .env.example file showing the required environment variable names, but never put real secrets in source code.
+
+EXPERIENCE DATA:
+Retain structured operational experience containing, where applicable:
+
+- task
+- context
+- tool
+- attempted_parameters
+- outcome
+- error_observed
+- failed_parameters
+- human_action
+- winning_recovery_fix
+- final_outcome
+
+The system should retain BOTH successful and failed executions.
+
+FRONTEND:
+Use Streamlit for a very simple dashboard.
+
+Do NOT build a complex frontend.
+
+One main dashboard should contain:
+
+1. Task Input
+- Task description
+- Number of records
+- Batch size
+- Run Task button
+
+2. Execution Pipeline
+Visually show:
+Task Received
+→ Hindsight Recall
+→ Human Review if required
+→ Tool Execution
+→ Hindsight Retain
+
+3. Hindsight Recall Result
+Show whether a relevant previous experience was found.
+
+4. HITL Warning
+When a previous failure is found, show a clear warning card:
+
+"PREVIOUS FAILURE DETECTED"
+
+Show:
+- previous task
+- previous failed parameter
+- error
+- previous successful recovery if available
+
+Buttons:
+- Apply Previous Fix
+- Modify Parameters
+- Abort
+
+5. Execution Result
+Clearly show SUCCESS or FAILURE.
+
+6. Hindsight Memory Inspector
+Show a simple list of retained experiences.
+
+PROJECT STRUCTURE:
+Keep the project small and understandable.
+Use a clean structure such as:
+
+backend/
+  api.py
+  agent.py
+  hindsight.py
+  models.py
+
+tools/
+  data_ingestion.py
+
+ui/
+  dashboard.py
+
+main.py
+requirements.txt
+.env.example
+README.md
+
+You may simplify this structure if a smaller structure is cleaner.
+
+IMPORTANT DEVELOPMENT RULES:
+- Keep the MVP small.
+- Do not add authentication.
+- Do not add multiple agents.
+- Do not add multiple tools.
+- Do not add a real production database.
+- Do not add Kubernetes, Docker, LangGraph, complex RAG, billing, user management, or unnecessary infrastructure.
+- Do not build a complicated UI.
+- Focus on making the complete Recall → Human Review → Execute → Retain loop actually work.
+
+After creating the files:
+1. Install dependencies.
+2. Run the application.
+3. Verify the FastAPI backend starts.
+4. Verify the Streamlit dashboard starts.
+5. Test the complete first-run failure → human fix → success → retain flow.
+6. Test the second similar-task → recall previous failure → human approval → success → retain flow.
+7. Fix any runtime errors you encounter.
+
+At the end, provide a concise summary of:
+- files created
+- how to run the application
+- environment variables required
+- how to perform the two-step demo
+
+Do not use fake Hindsight behavior if the real Hindsight integration is available. The Recall and Retain operations must use the actual Hindsight service.
